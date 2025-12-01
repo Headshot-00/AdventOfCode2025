@@ -6,7 +6,7 @@ pub struct Day1StateMachine {
 impl Day1StateMachine {
     pub fn new() -> Self {
         Day1StateMachine {
-            state: 0,
+            state: 50,
             counter: 0,
         }
     }

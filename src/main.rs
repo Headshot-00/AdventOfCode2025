@@ -10,13 +10,15 @@ fn day1() -> io::Result<()> {
     let file = File::open("day1input")?;
     let reader = BufReader::new(file);
 
-    let mut machine = Day1StateMachine::new();
+    let mut machine = Day1StateMachine::new(100);
 
     for line in reader.lines() {
         let line = line?;
         machine.update(&line);
     }
-    println!("Zero Counter: {}", machine.get_zero_counter());
+    println!("Zero Counter: {}", machine.get_part_1_counter());
+    println!("Wrap Counter: {}", machine.get_zero_counter());
+    println!("Final State is: {}", machine.get_state());
     Ok(())
 }
 

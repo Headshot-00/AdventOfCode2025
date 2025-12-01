@@ -23,14 +23,14 @@ impl Day1StateMachine {
         match command {
             "R" => {
                 if let Ok(num) = value_str.parse::<i32>() {
-                    self.state = (self.state + num).rem_euclid(99);
+                    self.state = (self.state + num).rem_euclid(100);
                 } else {
                     println!("Invalid number for addition: {}", value_str);
                 }
             }
             "L" => {
                 if let Ok(num) = value_str.parse::<i32>() {
-                    self.state = (self.state - num).rem_euclid(99);
+                    self.state = (self.state - num).rem_euclid(100);
                 } else {
                     println!("Invalid number for subtraction: {}", value_str);
                 }

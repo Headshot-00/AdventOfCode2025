@@ -5,12 +5,31 @@ use day1::sm::Day1StateMachine;
 
 use day2::accumulator::Day2Accumulator;
 
+use clap::{Parser, ValueEnum};
 use std::fs::File;
 use std::io::{self, BufRead, BufReader, Read};
+use std::path::PathBuf;
 
-fn day1() -> io::Result<()> {
+#[derive(Parser)]
+#[command(name = "advent_of_code_2025")]
+#[command(about = "Rusty solutions :3")]
+struct Args {
+    #[arg(value_enum)]
+    mode: Mode,
+
+    #[arg(short, long, default_value = "day2input")]
+    input: PathBuf,
+}
+
+#[derive(Copy, Clone, PartialEq, Eq, ValueEnum)]
+enum Mode {
+    Day1,
+    Day2,
+}
+
+fn day1(input: &std::path::Path) -> io::Result<()> {
     println!("Day 1 start");
-    let input = File::open("day1input")?;
+    let input = File::open(input)?;
     let reader = BufReader::new(input);
 
     let mut machine = Day1StateMachine::new(100);
@@ -25,10 +44,10 @@ fn day1() -> io::Result<()> {
     Ok(())
 }
 
-fn day2() -> io::Result<()> {
+fn day2(input: &std::path::Path) -> io::Result<()> {
     println!("Day 2 start");
 
-    let file = File::open("day2gigainput")?;
+    let file = File::open(input)?;
     let mut reader = BufReader::new(file);
     let mut acc = Day2Accumulator::new();
 
@@ -78,8 +97,12 @@ fn day2() -> io::Result<()> {
     Ok(())
 }
 
-fn main() -> io::Result<()> {
-    //day1()?;
-    day2()?;
+fn main() -> std::io::Result<()> {
+    let args = Args::parse();
+
+    match args.mode {
+        Mode::Day1 => day1(&args.input)?,
+        Mode::Day2 => day2(&args.input)?,
+    }
     Ok(())
 }

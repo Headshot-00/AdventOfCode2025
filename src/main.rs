@@ -115,7 +115,14 @@ fn day3(input: &std::path::Path) -> io::Result<()> {
             eprintln!("Failed to process '{}': {}", line, e);
         };
     }
-    println!("Maximum joltage is: {}", acc.get_total_joltage());
+    println!(
+        "Maximum joltage for part 1 is: {}",
+        acc.get_total_joltage_part1()
+    );
+    println!(
+        "Maximum joltage for part 2 is: {}",
+        acc.get_total_joltage_part2()
+    );
     Ok(())
 }
 

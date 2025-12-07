@@ -93,7 +93,8 @@ fn day2(input: &std::path::Path) -> io::Result<()> {
         }
     }
 
-    println!("Total sum of doubled numbers: {}", acc.get_sum());
+    println!("Total sum of doubled numbers: {}", acc.get_sum_part1());
+    println!("Total sum of all repeated numbers: {}", acc.get_sum_part2());
     Ok(())
 }
 

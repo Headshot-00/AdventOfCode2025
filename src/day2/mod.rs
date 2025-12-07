@@ -1,6 +1,7 @@
 use std::fmt;
 
 pub mod accumulator;
+pub mod digits;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum UpdateError {

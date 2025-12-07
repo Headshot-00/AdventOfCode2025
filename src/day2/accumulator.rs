@@ -1,13 +1,20 @@
 use crate::day2::UpdateError;
+use crate::day2::digits::{
+    DigitsU64, digit_ranges, divisors_for, is_minimal_block, pow10, pow10_minus1,
+};
 use log::{error, warn};
 
 pub struct Day2Accumulator {
-    sum: u64,
+    sum_part1: u64,
+    sum_part2: u64,
 }
 
 impl Day2Accumulator {
     pub fn new() -> Self {
-        Day2Accumulator { sum: 0 }
+        Day2Accumulator {
+            sum_part1: 0,
+            sum_part2: 0,
+        }
     }
 
     pub fn update(&mut self, input: &str) -> Result<(), UpdateError> {
@@ -49,38 +56,67 @@ impl Day2Accumulator {
             return Err(UpdateError::ReversedRange);
         }
 
-        // Get the even digit ranges in [num1, num2]
-        let ranges = even_ranges(num1, num2);
+        // Get the digit ranges in [num1, num2]
+        let ranges = digit_ranges(num1, num2);
         for (start, end, digits) in ranges {
-            // Instead of brute forcing, we directly calculate the possible doubled up numbers
-            // First we calculate 10^(number of digits / 2), having this will allow us to
-            // extract the first and second half of the digit representation efficiently using
-            // div and rem.
-            //
-            // Ex. 1234 has 4 digits so divisor becomes 10^(4/2) = 10^2 = 100
-            // 1234 / 100 = 12 and 1234 % = 34
-            let divisor = 10u64.pow(digits / 2);
-            // Now that we have the number halves, we can directly check the range of possible
-            // doubled up halves by using max and min on the lower and higher number of the
-            // range respectively.
-            let h_start = (start + divisor) / (divisor + 1);
-            let h_end = end / (divisor + 1);
-            // If the smallest part of the end digit is smaller than the largest part of the
-            // beginning digit we can just skip this range.
-            if h_end < h_start {
-                continue;
+            // Part 1: original doubled numbers, we only want to attempt this for even ranges.
+            if digits % 2 == DigitsU64::from(0) {
+                let divisor = pow10(digits / 2);
+                // Now that we have the number halves, we can directly check the range of possible
+                // doubled up halves by using max and min on the lower and higher number of the
+                // range respectively.
+                let h_start = (start + divisor) / (divisor + 1);
+                let h_end = end / (divisor + 1);
+                // If the smallest part of the end digit is smaller than the largest part of the
+                // beginning digit we can just skip this range.
+                if h_end >= h_start {
+                    // For all the other digits in our range of halves we can directly calculate
+                    // the wholes.
+                    for i in h_start..=h_end {
+                        self.sum_part1 += i + i * divisor;
+                    }
+                }
             }
-            // For all the other digits in our range of halves we can directly calculate the
-            // wholes.
-            for i in h_start..=h_end {
-                self.sum += i + i * divisor;
+
+            // Part 2: all repeated digit strings
+            for &block_digits_u32 in divisors_for(digits) {
+                let block_digits = DigitsU64::new(block_digits_u32).unwrap();
+
+                // rep_factor is the number that when multiplied by the block gives a full repeating number.
+                // Example: if digits = 8 and block_digits = 2, then rep_factor = 1010101
+                // Then if we have the block 12, we get block * rep_factor = 12121212
+                let rep_factor = pow10_minus1(digits) / pow10_minus1(block_digits);
+
+                // Determine the minimal and maximal blocks that, when repeated, lie within [start, end].
+                // The + rep_factor -1 trick rounds up the start to the nearest multiple of rep_factor
+                let block_start =
+                    ((start + rep_factor - 1) / rep_factor).max(pow10(block_digits - 1));
+                let block_end = (end / rep_factor).min(pow10_minus1(block_digits));
+
+                // Skip if there is no valid block in this range
+                if block_end < block_start {
+                    continue;
+                }
+                for block in block_start..=block_end {
+                    // Only count numbers whose repeated pattern is minimal
+                    // Example: if we have block_digits 2, then the block 11 is not minimal because '1'
+                    // repeats twice within the block. But the block 12 is minimal because there is no
+                    // repetiton inside the block.
+                    if is_minimal_block(block, block_digits) {
+                        self.sum_part2 += block * rep_factor;
+                    }
+                }
             }
         }
         Ok(())
     }
 
-    pub fn get_sum(&self) -> u64 {
-        self.sum
+    pub fn get_sum_part1(&self) -> u64 {
+        self.sum_part1
+    }
+
+    pub fn get_sum_part2(&self) -> u64 {
+        self.sum_part2
     }
 }
 
@@ -88,39 +124,4 @@ impl Default for Day2Accumulator {
     fn default() -> Self {
         Self::new()
     }
-}
-
-fn num_digits(mut n: u64) -> u32 {
-    let mut digits = 1;
-    while n >= 10 {
-        n /= 10;
-        digits += 1;
-    }
-    digits
-}
-
-fn even_ranges(num1: u64, num2: u64) -> impl Iterator<Item = (u64, u64, u32)> {
-    let start_digits = num_digits(num1);
-    let end_digits = num_digits(num2);
-
-    (start_digits..=end_digits).filter_map(move |d| {
-        // We only care about even digits
-        if d % 2 != 0 {
-            return None;
-        }
-
-        let lower = 10u64.pow(d - 1); // Lower bound for the d-digit numbers
-        let upper = 10u64.pow(d) - 1; // Upper bound for the d-digit numbers
-
-        // Adjust the bounds to fit within num1 and num2
-        let start = num1.max(lower);
-        let end = num2.min(upper);
-
-        // Only add ranges where start <= end
-        if start <= end {
-            Some((start, end, d))
-        } else {
-            None
-        }
-    })
 }

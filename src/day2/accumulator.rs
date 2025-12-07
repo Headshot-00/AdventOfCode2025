@@ -59,27 +59,8 @@ impl Day2Accumulator {
         // Get the digit ranges in [num1, num2]
         let ranges = digit_ranges(num1, num2);
         for (start, end, digits) in ranges {
-            // Part 1: original doubled numbers, we only want to attempt this for even ranges.
-            if digits % 2 == DigitsU64::from(0) {
-                let divisor = pow10(digits / 2);
-                // Now that we have the number halves, we can directly check the range of possible
-                // doubled up halves by using max and min on the lower and higher number of the
-                // range respectively.
-                let h_start = (start + divisor) / (divisor + 1);
-                let h_end = end / (divisor + 1);
-                // If the smallest part of the end digit is smaller than the largest part of the
-                // beginning digit we can just skip this range.
-                if h_end >= h_start {
-                    // For all the other digits in our range of halves we can directly calculate
-                    // the wholes.
-                    for i in h_start..=h_end {
-                        self.sum_part1 += i + i * divisor;
-                    }
-                }
-            }
-
-            // Part 2: all repeated digit strings
             for &block_digits_u32 in divisors_for(digits) {
+                // Instead of brute forcing, we directly calculate the possible repeated numbers.
                 let block_digits = DigitsU64::new(block_digits_u32).unwrap();
 
                 // rep_factor is the number that when multiplied by the block gives a full repeating number.
@@ -98,6 +79,10 @@ impl Day2Accumulator {
                     continue;
                 }
                 for block in block_start..=block_end {
+                    // We can easily calculate the solution to part1 at the same time
+                    if digits / block_digits == DigitsU64::from(2) {
+                        self.sum_part1 += block * rep_factor;
+                    }
                     // Only count numbers whose repeated pattern is minimal
                     // Example: if we have block_digits 2, then the block 11 is not minimal because '1'
                     // repeats twice within the block. But the block 12 is minimal because there is no

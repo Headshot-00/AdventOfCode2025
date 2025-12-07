@@ -95,6 +95,15 @@ impl Div<u32> for DigitsU64 {
         DigitsU64((self.0 as u32 / rhs) as u8)
     }
 }
+
+impl Div<DigitsU64> for DigitsU64 {
+    type Output = DigitsU64;
+
+    fn div(self, rhs: DigitsU64) -> DigitsU64 {
+        DigitsU64((self.0 as u8 / rhs.0 as u8) as u8)
+    }
+}
+
 impl Rem<u32> for DigitsU64 {
     type Output = DigitsU64;
 

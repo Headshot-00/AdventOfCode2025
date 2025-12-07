@@ -1,9 +1,12 @@
 mod day1;
 mod day2;
+mod day3;
 
 use day1::sm::Day1StateMachine;
 
 use day2::accumulator::Day2Accumulator;
+
+use day3::accumulator::Day3Accumulator;
 
 use clap::{Parser, ValueEnum};
 use std::fs::File;
@@ -25,6 +28,7 @@ struct Args {
 enum Mode {
     Day1,
     Day2,
+    Day3,
 }
 
 fn day1(input: &std::path::Path) -> io::Result<()> {
@@ -98,12 +102,30 @@ fn day2(input: &std::path::Path) -> io::Result<()> {
     Ok(())
 }
 
+fn day3(input: &std::path::Path) -> io::Result<()> {
+    println!("Day 3 start");
+    let input = File::open(input)?;
+    let reader = BufReader::new(input);
+
+    let mut acc = Day3Accumulator::new();
+
+    for line in reader.lines() {
+        let line = line?;
+        if let Err(e) = acc.update(&line) {
+            eprintln!("Failed to process '{}': {}", line, e);
+        };
+    }
+    println!("Maximum joltage is: {}", acc.get_total_joltage());
+    Ok(())
+}
+
 fn main() -> std::io::Result<()> {
     let args = Args::parse();
 
     match args.mode {
         Mode::Day1 => day1(&args.input)?,
         Mode::Day2 => day2(&args.input)?,
+        Mode::Day3 => day3(&args.input)?,
     }
     Ok(())
 }

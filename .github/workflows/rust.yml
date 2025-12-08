@@ -19,6 +19,11 @@ jobs:
           toolchain: stable
           override: true
 
+      - name: Install OpenCL (CPU)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ocl-icd-opencl-dev pocl-opencl-icd
+
       - name: Build
         run: cargo build --verbose
 

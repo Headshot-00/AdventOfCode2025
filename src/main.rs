@@ -1,12 +1,16 @@
+mod adv_errors;
 mod day1;
 mod day2;
 mod day3;
+mod day4;
 
 use day1::sm::Day1StateMachine;
 
 use day2::accumulator::Day2Accumulator;
 
 use day3::accumulator::Day3Accumulator;
+
+use day4::solver::Day4Solver;
 
 use clap::{Parser, ValueEnum};
 use std::fs::File;
@@ -29,6 +33,7 @@ enum Mode {
     Day1,
     Day2,
     Day3,
+    Day4,
 }
 
 fn day1(input: &std::path::Path) -> io::Result<()> {
@@ -126,6 +131,47 @@ fn day3(input: &std::path::Path) -> io::Result<()> {
     Ok(())
 }
 
+fn day4(input: &std::path::Path) -> io::Result<()> {
+    println!("Day 4 start");
+    let input = File::open(input)?;
+    let reader = BufReader::new(input);
+
+    let mut solver = Day4Solver::default();
+
+    for line in reader.lines() {
+        let line = line?;
+        if let Err(e) = solver.add_row(&line) {
+            eprintln!("Failed to process '{}': {}", line, e);
+        };
+    }
+
+    solver.finalize_input();
+    solver.init_gpu().unwrap();
+
+    let mut firstloop = true;
+    let mut total_movable = 0;
+    loop {
+        let accessible = solver.solve().map_err(|e| {
+            eprintln!("Solver failed: {:?}", e);
+            io::Error::new(io::ErrorKind::Other, "Solver failed")
+        })?;
+        if firstloop {
+            println!(
+                "The number of accessible crates after the first step is: {}",
+                accessible
+            );
+            firstloop = false;
+        }
+        if accessible == 0 {
+            break;
+        }
+        total_movable += accessible;
+    }
+    println!("The total number of movable crates is: {}", total_movable);
+
+    Ok(())
+}
+
 fn main() -> std::io::Result<()> {
     let args = Args::parse();
 
@@ -133,6 +179,7 @@ fn main() -> std::io::Result<()> {
         Mode::Day1 => day1(&args.input)?,
         Mode::Day2 => day2(&args.input)?,
         Mode::Day3 => day3(&args.input)?,
+        Mode::Day4 => day4(&args.input)?,
     }
     Ok(())
 }

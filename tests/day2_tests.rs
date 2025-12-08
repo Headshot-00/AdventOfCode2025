@@ -1,4 +1,5 @@
-use advent_of_code_2025::day2::{UpdateError, accumulator::Day2Accumulator};
+use advent_of_code_2025::adv_errors::UpdateError;
+use advent_of_code_2025::day2::accumulator::Day2Accumulator;
 
 #[test]
 fn test_basic_range() {

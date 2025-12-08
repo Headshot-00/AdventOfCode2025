@@ -1,4 +1,4 @@
-use crate::day3::UpdateError;
+use crate::adv_errors::UpdateError;
 use log::warn;
 
 pub struct Day3Accumulator {

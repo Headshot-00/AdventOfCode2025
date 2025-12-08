@@ -1,4 +1,4 @@
-use crate::day2::UpdateError;
+use crate::adv_errors::UpdateError;
 use crate::day2::digits::{
     DigitsU64, digit_ranges, divisors_for, is_minimal_block, pow10, pow10_minus1,
 };

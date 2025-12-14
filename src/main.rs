@@ -3,6 +3,7 @@ mod day1;
 mod day2;
 mod day3;
 mod day4;
+mod day5;
 mod day9;
 
 use day1::sm::Day1StateMachine;
@@ -35,6 +36,7 @@ enum Mode {
     Day2,
     Day3,
     Day4,
+    Day5,
     Day9,
 }
 
@@ -174,6 +176,21 @@ fn day4(input: &std::path::Path) -> io::Result<()> {
     Ok(())
 }
 
+fn day5(input: &std::path::Path) -> io::Result<()> {
+    println!("Day 5 start");
+    let input = File::open(input)?;
+    let reader = BufReader::new(input);
+
+    let (num_fresh, total_ranges) = day5::solve(reader).unwrap();
+
+    println!("The number of fresh ingredients is: {}", num_fresh);
+    println!(
+        "The total number of ingredients that could be considered fresh is: {}",
+        total_ranges
+    );
+    Ok(())
+}
+
 fn day9(input: &std::path::Path) -> io::Result<()> {
     println!("Day 9 start");
     let input = File::open(input)?;
@@ -203,6 +220,7 @@ fn main() -> std::io::Result<()> {
         Mode::Day2 => day2(&args.input)?,
         Mode::Day3 => day3(&args.input)?,
         Mode::Day4 => day4(&args.input)?,
+        Mode::Day5 => day5(&args.input)?,
         Mode::Day9 => day9(&args.input)?,
     }
     Ok(())

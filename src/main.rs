@@ -3,6 +3,7 @@ mod day1;
 mod day2;
 mod day3;
 mod day4;
+mod day9;
 
 use day1::sm::Day1StateMachine;
 
@@ -34,6 +35,7 @@ enum Mode {
     Day2,
     Day3,
     Day4,
+    Day9,
 }
 
 fn day1(input: &std::path::Path) -> io::Result<()> {
@@ -172,6 +174,27 @@ fn day4(input: &std::path::Path) -> io::Result<()> {
     Ok(())
 }
 
+fn day9(input: &std::path::Path) -> io::Result<()> {
+    println!("Day 9 start");
+    let input = File::open(input)?;
+    let reader = BufReader::new(input);
+
+    let points = day9::read_points(reader).unwrap();
+
+    let biggest = day9::find_biggest_rectangle_simple(&points);
+
+    println!("The biggest possible rectangle has area {} units", biggest);
+
+    let biggest = day9::find_biggest_rectangle_polygon(points);
+
+    println!(
+        "The biggest possible rectangle containing only green or red tiles has area {} units",
+        biggest
+    );
+
+    Ok(())
+}
+
 fn main() -> std::io::Result<()> {
     let args = Args::parse();
 
@@ -180,6 +203,7 @@ fn main() -> std::io::Result<()> {
         Mode::Day2 => day2(&args.input)?,
         Mode::Day3 => day3(&args.input)?,
         Mode::Day4 => day4(&args.input)?,
+        Mode::Day9 => day9(&args.input)?,
     }
     Ok(())
 }

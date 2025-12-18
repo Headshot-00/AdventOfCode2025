@@ -19,7 +19,6 @@ fn test_case_example() {
         solver.add_row(&line).expect("Failed to add row");
     }
     solver.finalize_input();
-    solver.init_gpu().unwrap();
 
     assert_eq!(solver.solve().expect("Solver failed"), 13);
 }

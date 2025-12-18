@@ -1,103 +1,31 @@
-use crate::adv_errors::UpdateError;
+use rayon::prelude::*;
+use std::sync::atomic::{AtomicU32, Ordering};
 use log::warn;
-use ocl::{Buffer, ProQue};
-
-const CONV_CL: &str = include_str!("conv2d_threshold.cl");
-
-// Yeah, this whole thing would probably be faster on the CPU for this small input
+use crate::adv_errors::UpdateError;
 
 pub struct Day4Solver {
-    matrix: Vec<Vec<i8>>,
-    kernel: Vec<f32>,
+    matrix: Vec<Vec<i8>>,       // only used for input parsing
+    kernel: Vec<f32>,           // 3x3 kernel
     activation: f32,
     width: usize,
     height: usize,
-    pro_que: Option<ProQue>,
-    buffer_a: Option<Buffer<f32>>,
-    buffer_b: Option<Buffer<f32>>,
-    buffer_accessible: Option<Buffer<i32>>,
-    kernel_cl: Option<ocl::Kernel>,
+    buffer_a: Vec<f32>,         // ping-pong buffer
+    buffer_b: Vec<f32>,
     iteration: u8,
 }
+
 impl Day4Solver {
     pub fn new(kernel: Vec<f32>, activation: f32) -> Self {
         Day4Solver {
             matrix: Vec::new(),
-            kernel: kernel,
-            activation: activation,
+            kernel,
+            activation,
             width: 0,
             height: 0,
-            pro_que: None,
-            buffer_a: None,
-            buffer_b: None,
-            buffer_accessible: None,
-            kernel_cl: None,
+            buffer_a: Vec::new(),
+            buffer_b: Vec::new(),
             iteration: 0,
         }
-    }
-
-    pub fn init_gpu(&mut self) -> ocl::Result<()> {
-        self.width = self.matrix.first().map(|r| r.len()).unwrap_or(0);
-        self.height = self.matrix.len();
-
-        let pro_que = ProQue::builder()
-            .src(CONV_CL)
-            .dims((self.width, self.height))
-            .build()?;
-
-        let input_len = self.width * self.height;
-
-        let buffer_a = Buffer::<f32>::builder()
-            .queue(pro_que.queue().clone())
-            .flags(ocl::flags::MEM_READ_WRITE)
-            .len(input_len)
-            .copy_host_slice(
-                &self
-                    .matrix
-                    .iter()
-                    .flat_map(|r| r.iter().map(|&v| v as f32))
-                    .collect::<Vec<_>>(),
-            )
-            .build()?;
-
-        let buffer_b = Buffer::<f32>::builder()
-            .queue(pro_que.queue().clone())
-            .flags(ocl::flags::MEM_READ_WRITE)
-            .len(input_len)
-            .build()?;
-
-        let buffer_accessible = Buffer::<i32>::builder()
-            .queue(pro_que.queue().clone())
-            .flags(ocl::flags::MEM_READ_WRITE)
-            .len(1)
-            .build()?;
-
-        let buffer_kernel = Buffer::<f32>::builder()
-            .queue(pro_que.queue().clone())
-            .flags(ocl::flags::MEM_READ_ONLY | ocl::flags::MEM_COPY_HOST_PTR)
-            .len(self.kernel.len())
-            .copy_host_slice(&self.kernel)
-            .build()?;
-
-        let kernel_cl = pro_que
-            .kernel_builder("conv2d_threshold")
-            .arg_named("input", &buffer_a)
-            .arg_named("output", &buffer_b)
-            .arg_named("accessible_count", &buffer_accessible)
-            .arg_named("k", &buffer_kernel)
-            .arg(self.activation)
-            .arg(self.width as i32)
-            .arg(self.height as i32)
-            .build()?;
-
-        self.pro_que = Some(pro_que);
-        self.buffer_a = Some(buffer_a);
-        self.buffer_b = Some(buffer_b);
-        self.buffer_accessible = Some(buffer_accessible);
-        self.kernel_cl = Some(kernel_cl);
-        self.iteration = 0;
-
-        Ok(())
     }
 
     pub fn add_row(&mut self, line: &str) -> Result<(), UpdateError> {
@@ -122,69 +50,90 @@ impl Day4Solver {
     pub fn finalize_input(&mut self) {
         self.height = self.matrix.len();
         self.width = self.matrix.first().map(|r| r.len()).unwrap_or(0);
+
+        let len = self.width * self.height;
+
+        // flatten input into buffer_a
+        self.buffer_a = self.matrix
+            .iter()
+            .flat_map(|r| r.iter().map(|&v| v as f32))
+            .collect();
+
+        // initialize ping-pong buffer_b
+        self.buffer_b = vec![0.0; len];
+
+        self.iteration = 0;
     }
 
     pub fn solve(&mut self) -> Result<u32, UpdateError> {
         let (input_buf, output_buf) = if self.iteration % 2 == 0 {
-            (&self.buffer_a, &self.buffer_b)
+            (&self.buffer_a, &mut self.buffer_b)
         } else {
-            (&self.buffer_b, &self.buffer_a)
+            (&self.buffer_b, &mut self.buffer_a)
         };
 
         self.iteration += 1;
 
-        // Reset accessible count
-        self.buffer_accessible
-            .as_ref()
-            .unwrap()
-            .write(&vec![0i32])
-            .enq()
-            .map_err(|_| UpdateError::InvalidInput)?;
+        let accessible = AtomicU32::new(0);
+        let width = self.width;
+        let height = self.height;
+        let k = &self.kernel;
+        let activation = self.activation;
 
-        // Update kernel args to point to correct buffers
-        let kernel = self.kernel_cl.as_mut().unwrap();
-        kernel
-            .set_arg("input", input_buf.as_ref().unwrap())
-            .unwrap();
-        kernel
-            .set_arg("output", output_buf.as_ref().unwrap())
-            .unwrap();
+        output_buf
+            .par_chunks_mut(width)
+            .enumerate()
+            .for_each(|(y, row)| {
+                for x in 0..width {
+                    let idx = y * width + x;
 
-        unsafe {
-            kernel.enq().map_err(|_| UpdateError::InvalidInput)?;
-        }
+                    if input_buf[idx] <= 0.0 {
+                        row[x] = 0.0;
+                        continue;
+                    }
 
-        // Read accessible count
-        let mut accessible = vec![0i32; 1];
-        self.buffer_accessible
-            .as_ref()
-            .unwrap()
-            .read(&mut accessible)
-            .enq()
-            .map_err(|_| UpdateError::InvalidInput)?;
+                    let mut sum = 0.0;
 
-        Ok(accessible[0] as u32)
+                    for dy in -1..=1 {
+                        let sy = y as isize + dy;
+                        if sy < 0 || sy >= height as isize {
+                            continue;
+                        }
+
+                        for dx in -1..=1 {
+                            let sx = x as isize + dx;
+                            if sx < 0 || sx >= width as isize {
+                                continue;
+                            }
+
+                            let n = input_buf[sy as usize * width + sx as usize];
+                            if n > 0.0 {
+                                let ki = (dy + 1) * 3 + (dx + 1);
+                                sum += n * k[ki as usize];
+                            }
+                        }
+                    }
+
+                    if sum >= activation {
+                        row[x] = 1.0;
+                    } else {
+                        row[x] = -1.0;
+                        accessible.fetch_add(1, Ordering::Relaxed);
+                    }
+                }
+            });
+
+        Ok(accessible.load(Ordering::Relaxed))
     }
 }
 
 impl Default for Day4Solver {
     fn default() -> Self {
-        // Kernel that counts neighbors
-        // 1/8 1/8 1/8
-        // 1/8 0   1/8
-        // 1/8 1/8 1/8
-        // Activation 0.5 = 4/8
         Self::new(
             vec![
-                1.0 / 8.0,
-                1.0 / 8.0,
-                1.0 / 8.0,
-                1.0 / 8.0,
-                0.0,
-                1.0 / 8.0,
-                1.0 / 8.0,
-                1.0 / 8.0,
-                1.0 / 8.0,
+                1.0 / 8.0, 1.0 / 8.0, 1.0 / 8.0,
+                1.0 / 8.0, 0.0,       1.0 / 8.0,
+                1.0 / 8.0, 1.0 / 8.0, 1.0 / 8.0,
             ],
             0.5,
         )

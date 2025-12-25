@@ -4,6 +4,8 @@ mod day2;
 mod day3;
 mod day4;
 mod day5;
+mod day7;
+mod day8;
 mod day9;
 
 use day1::sm::Day1StateMachine;
@@ -18,6 +20,7 @@ use clap::{Parser, ValueEnum};
 use std::fs::File;
 use std::io::{self, BufRead, BufReader, Read};
 use std::path::PathBuf;
+use std::time::Instant;
 
 #[derive(Parser)]
 #[command(name = "advent_of_code_2025")]
@@ -26,22 +29,51 @@ struct Args {
     #[arg(value_enum)]
     mode: Mode,
 
-    #[arg(short, long, default_value = "day2input")]
+    #[arg(short, long, default_value = "day%ninput")]
     input: PathBuf,
 }
 
-#[derive(Copy, Clone, PartialEq, Eq, ValueEnum)]
+#[derive(Copy, Clone, PartialEq, Eq, ValueEnum, Debug)]
 enum Mode {
+    All,
     Day1,
     Day2,
     Day3,
     Day4,
     Day5,
+    //Day6,
+    Day7,
+    Day8,
     Day9,
+    //Day10,
+    //Day11,
+    //Day12,
 }
 
-fn day1(input: &std::path::Path) -> io::Result<()> {
-    println!("Day 1 start");
+// tiny helper to wrap timing around any day function
+fn time_day(name: &str, f: fn(&PathBuf) -> io::Result<()>, input: &PathBuf) -> io::Result<()> {
+    println!("=== {} start ===", name);
+    let start = Instant::now();
+    let result = f(input);
+    let elapsed = start.elapsed();
+    println!("Elapsed: {:.3?}", elapsed);
+    println!("===  {} end  ===\n", name);
+    result
+}
+
+fn day_input_path(pattern: &PathBuf, day_name: &str) -> PathBuf {
+    let s = pattern.to_string_lossy();
+
+    if s.contains("%n") {
+        let day_number = &day_name[3..];
+        let day_number = format!("{:0>2}", day_number.parse::<u32>().unwrap());
+        PathBuf::from(s.replace("%n", &day_number))
+    } else {
+        pattern.clone()
+    }
+}
+
+fn day1(input: &std::path::PathBuf) -> io::Result<()> {
     let input = File::open(input)?;
     let reader = BufReader::new(input);
 
@@ -57,9 +89,7 @@ fn day1(input: &std::path::Path) -> io::Result<()> {
     Ok(())
 }
 
-fn day2(input: &std::path::Path) -> io::Result<()> {
-    println!("Day 2 start");
-
+fn day2(input: &std::path::PathBuf) -> io::Result<()> {
     let file = File::open(input)?;
     let mut reader = BufReader::new(file);
     let mut acc = Day2Accumulator::new();
@@ -111,8 +141,7 @@ fn day2(input: &std::path::Path) -> io::Result<()> {
     Ok(())
 }
 
-fn day3(input: &std::path::Path) -> io::Result<()> {
-    println!("Day 3 start");
+fn day3(input: &std::path::PathBuf) -> io::Result<()> {
     let input = File::open(input)?;
     let reader = BufReader::new(input);
 
@@ -135,8 +164,7 @@ fn day3(input: &std::path::Path) -> io::Result<()> {
     Ok(())
 }
 
-fn day4(input: &std::path::Path) -> io::Result<()> {
-    println!("Day 4 start");
+fn day4(input: &std::path::PathBuf) -> io::Result<()> {
     let input = File::open(input)?;
     let reader = BufReader::new(input);
 
@@ -150,7 +178,6 @@ fn day4(input: &std::path::Path) -> io::Result<()> {
     }
 
     solver.finalize_input();
-    solver.init_gpu().unwrap();
 
     let mut firstloop = true;
     let mut total_movable = 0;
@@ -176,8 +203,7 @@ fn day4(input: &std::path::Path) -> io::Result<()> {
     Ok(())
 }
 
-fn day5(input: &std::path::Path) -> io::Result<()> {
-    println!("Day 5 start");
+fn day5(input: &std::path::PathBuf) -> io::Result<()> {
     let input = File::open(input)?;
     let reader = BufReader::new(input);
 
@@ -191,8 +217,39 @@ fn day5(input: &std::path::Path) -> io::Result<()> {
     Ok(())
 }
 
-fn day9(input: &std::path::Path) -> io::Result<()> {
-    println!("Day 9 start");
+fn day7(input: &std::path::PathBuf) -> io::Result<()> {
+    let input = File::open(input)?;
+    let reader = BufReader::new(input);
+
+    let (splits, worlds) = day7::solve(reader).unwrap();
+
+    println!("The number of splits is: {}", splits);
+
+    println!("The number of parallel worlds is {}", worlds);
+
+    Ok(())
+}
+
+fn day8(input: &std::path::PathBuf) -> io::Result<()> {
+    let input = File::open(input)?;
+    let reader = BufReader::new(input);
+
+    let (top3_product, final_x_product) = day8::solve(reader, 1000).unwrap();
+
+    println!(
+        "The product of the three biggest graphs after connecting 1000 edges is: {}",
+        top3_product
+    );
+
+    println!(
+        "The product of the x coordinates of the two points comprising the final edge is: {}",
+        final_x_product
+    );
+
+    Ok(())
+}
+
+fn day9(input: &std::path::PathBuf) -> io::Result<()> {
     let input = File::open(input)?;
     let reader = BufReader::new(input);
 
@@ -212,16 +269,42 @@ fn day9(input: &std::path::Path) -> io::Result<()> {
     Ok(())
 }
 
-fn main() -> std::io::Result<()> {
+fn main() -> io::Result<()> {
     let args = Args::parse();
 
+    let day_map: &[(&str, Mode, fn(&PathBuf) -> io::Result<()>)] = &[
+        ("Day1", Mode::Day1, day1),
+        ("Day2", Mode::Day2, day2),
+        ("Day3", Mode::Day3, day3),
+        ("Day4", Mode::Day4, day4),
+        ("Day5", Mode::Day5, day5),
+        ("Day7", Mode::Day7, day7),
+        ("Day8", Mode::Day8, day8),
+        ("Day9", Mode::Day9, day9),
+    ];
+
     match args.mode {
-        Mode::Day1 => day1(&args.input)?,
-        Mode::Day2 => day2(&args.input)?,
-        Mode::Day3 => day3(&args.input)?,
-        Mode::Day4 => day4(&args.input)?,
-        Mode::Day5 => day5(&args.input)?,
-        Mode::Day9 => day9(&args.input)?,
+        Mode::All => {
+            for (name, _, func) in day_map {
+                let day_input = day_input_path(&args.input, name);
+                if !day_input.exists() {
+                    eprintln!("Input file {:?} does not exist, skipping", day_input);
+                    continue;
+                }
+                if let Err(e) = time_day(name, *func, &day_input) {
+                    eprintln!("Error in {}: {:?}", name, e);
+                }
+            }
+        }
+        _ => {
+            if let Some((name, _, func)) = day_map.iter().find(|(_, m, _)| *m == args.mode) {
+                let day_input = day_input_path(&args.input, name);
+                time_day(name, *func, &day_input)?;
+            } else {
+                eprintln!("Unknown mode {:?}", args.mode);
+            }
+        }
     }
+
     Ok(())
 }

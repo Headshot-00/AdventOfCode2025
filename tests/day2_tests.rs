@@ -15,7 +15,7 @@ fn test_basic_range() {
 fn test_empty_input() {
     let mut acc = Day2Accumulator::new();
     let err = acc.update("").unwrap_err();
-    assert_eq!(err, UpdateError::EmptyInput);
+    assert!(matches!(err, UpdateError::EmptyInput));
     assert_eq!(acc.get_sum_part1(), 0);
     assert_eq!(acc.get_sum_part2(), 0);
 }
@@ -24,17 +24,32 @@ fn test_empty_input() {
 fn test_malformed_input() {
     let mut acc = Day2Accumulator::new();
     let err = acc.update("1234").unwrap_err(); // missing '-'
-    assert_eq!(err, UpdateError::InvalidInput);
+    assert!(matches!(
+        err,
+        UpdateError::InvalidInput(msg) if msg.contains("valid range")
+    ));
 
-    let err = acc.update("12-ab").unwrap_err(); // second substring is not a number
-    assert_eq!(err, UpdateError::InvalidInput);
+    let err = acc.update("ab-34").unwrap_err(); // first substring is not a number
+    assert!(matches!(
+        err,
+        UpdateError::InvalidInput(msg) if msg.contains("could not be parsed as an integer")
+    ));
+
+    let err = acc.update("12-cd").unwrap_err(); // second substring is not a number
+    assert!(matches!(
+        err,
+        UpdateError::InvalidInput(msg) if msg.contains("could not be parsed as an integer")
+    ));
 }
 
 #[test]
 fn test_reversed_range() {
     let mut acc = Day2Accumulator::new();
-    let err = acc.update("100-10").unwrap_err(); // permissive version
-    assert_eq!(err, UpdateError::ReversedRange);
+    let err = acc.update("100-10").unwrap_err();
+    assert!(matches!(
+        err,
+        UpdateError::InvalidInput(msg) if msg.contains("Invalid range")
+    ));
     assert_eq!(acc.get_sum_part1(), 0);
     assert_eq!(acc.get_sum_part2(), 0);
 }

@@ -54,7 +54,7 @@ pub fn read_points<R: BufRead>(reader: R) -> Result<Vec<Point>, UpdateError> {
     let points: Vec<Point> = reader
         .lines()
         .map(|line| {
-            let line = line.map_err(|_| UpdateError::InvalidInput)?;
+            let line = line.map_err(|e| UpdateError::Io(e))?;
             let line = line.trim();
             if line.is_empty() {
                 return Err(UpdateError::EmptyInput); // we’ll filter empty later
@@ -62,21 +62,30 @@ pub fn read_points<R: BufRead>(reader: R) -> Result<Vec<Point>, UpdateError> {
             let parts: Vec<&str> = line.split(',').collect();
 
             if parts.len() != 3 {
-                return Err(UpdateError::InvalidInput);
+                return Err(UpdateError::InvalidInput(format!(
+                    "\"{}\" does not contain exactly three elements separated by comma!",
+                    line
+                )));
             }
 
-            let x = parts[0]
-                .trim()
-                .parse::<i64>()
-                .map_err(|_| UpdateError::InvalidInput)?;
-            let y = parts[1]
-                .trim()
-                .parse::<i64>()
-                .map_err(|_| UpdateError::InvalidInput)?;
-            let z = parts[2]
-                .trim()
-                .parse::<i64>()
-                .map_err(|_| UpdateError::InvalidInput)?;
+            let x = parts[0].trim().parse::<i64>().map_err(|_| {
+                UpdateError::InvalidInput(format!(
+                    "\"{}\" Could not be parsed as an integer!",
+                    parts[0]
+                ))
+            })?;
+            let y = parts[1].trim().parse::<i64>().map_err(|_| {
+                UpdateError::InvalidInput(format!(
+                    "\"{}\" Could not be parsed as an integer!",
+                    parts[1]
+                ))
+            })?;
+            let z = parts[2].trim().parse::<i64>().map_err(|_| {
+                UpdateError::InvalidInput(format!(
+                    "\"{}\" Could not be parsed as an integer!",
+                    parts[2]
+                ))
+            })?;
             Ok(Point { x, y, z })
         })
         .filter_map(|res| match res {
@@ -137,7 +146,9 @@ pub fn solve<R: BufRead>(reader: R, cluster_mult_num: usize) -> Result<(i64, i64
 
     let n = points.len();
     if n < 2 {
-        return Err(UpdateError::InvalidInput);
+        return Err(UpdateError::InvalidInput(
+            "Input does not contain at least two points!".into(),
+        ));
     }
 
     let mut edges: Vec<Edge> = Vec::with_capacity(n * (n - 1) / 2);
@@ -169,7 +180,9 @@ pub fn solve<R: BufRead>(reader: R, cluster_mult_num: usize) -> Result<(i64, i64
     let mut sizes: Vec<usize> = counts.values().copied().collect();
     sizes.sort_unstable_by(|a, b| b.cmp(a));
     if sizes.len() < 3 {
-        return Err(UpdateError::InvalidInput);
+        return Err(UpdateError::InvalidInput(
+            "Fewer than three clusters exist after connecting 1000 pairs!".into(),
+        ));
     }
     let cluster_product = sizes[0] as i64 * sizes[1] as i64 * sizes[2] as i64;
 
@@ -185,8 +198,8 @@ pub fn solve<R: BufRead>(reader: R, cluster_mult_num: usize) -> Result<(i64, i64
     }
 
     let (i, j) = match last_edge {
-        Some(edge) => edge,                            // bind (i, j) here
-        None => return Err(UpdateError::InvalidInput), // return early if no edge
+        Some(edge) => edge, // bind (i, j) here
+        None => return Err(UpdateError::InvalidInput("Could not find any edge!".into())), // return early if no edge
     };
 
     let p1 = points[i];

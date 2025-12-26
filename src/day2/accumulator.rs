@@ -2,7 +2,6 @@ use crate::adv_errors::UpdateError;
 use crate::day2::digits::{
     DigitsU64, digit_ranges, divisors_for, is_minimal_block, pow10, pow10_minus1,
 };
-use log::{error, warn};
 
 pub struct Day2Accumulator {
     sum_part1: u64,
@@ -19,7 +18,6 @@ impl Day2Accumulator {
 
     pub fn update(&mut self, input: &str) -> Result<(), UpdateError> {
         if input.is_empty() {
-            warn!("Input was empty.");
             return Err(UpdateError::EmptyInput);
         }
         // Split on '-'
@@ -33,27 +31,32 @@ impl Day2Accumulator {
 
                 match (first_parsed, second_parsed) {
                     (Ok(first), Ok(second)) => (first, second), // Return parsed numbers
-                    (Err(e), _) => {
-                        error!("Failed to parse first item: {}", e);
-                        return Err(UpdateError::InvalidInput);
+                    (Err(_), _) => {
+                        return Err(UpdateError::InvalidInput(format!(
+                            "\"{}\" could not be parsed as an integer!",
+                            first.trim()
+                        )));
                     }
-                    (_, Err(e)) => {
-                        error!("Failed to parse second item: {}", e);
-                        return Err(UpdateError::InvalidInput);
+                    (_, Err(_)) => {
+                        return Err(UpdateError::InvalidInput(format!(
+                            "\"{}\" could not be parsed as an integer!",
+                            second.trim()
+                        )));
                     }
                 }
             }
             None => {
-                error!("Malformed input: {}", input);
-                return Err(UpdateError::InvalidInput);
+                return Err(UpdateError::InvalidInput(format!(
+                    "\"{}\" is not a valid range (expected 'a-b')",
+                    input
+                )));
             }
         };
         if num1 > num2 {
-            warn!(
-                "Revesed range in input: First number {} is larger than second {}!",
-                num1, num2
-            );
-            return Err(UpdateError::ReversedRange);
+            return Err(UpdateError::InvalidInput(format!(
+                "Invalid range! \"{}\": lower bound is greater than upper bound",
+                input
+            )));
         }
 
         // Get the digit ranges in [num1, num2]

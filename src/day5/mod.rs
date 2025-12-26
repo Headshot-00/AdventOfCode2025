@@ -31,30 +31,49 @@ pub fn read_ranges_ingredients<R: BufRead>(
         .collect::<Result<_, _>>()
         .map_err(|_| UpdateError::EmptyInput)?;
 
-    let split_idx = lines
-        .iter()
-        .position(|l| l.trim().is_empty())
-        .ok_or(UpdateError::InvalidInput)?;
+    let split_idx =
+        lines
+            .iter()
+            .position(|l| l.trim().is_empty())
+            .ok_or(UpdateError::InvalidInput(format!(
+                "Could not find an empty separator line!"
+            )))?;
 
     let (range_lines, number_lines) = lines.split_at(split_idx);
 
     let ranges = range_lines
         .iter()
         .map(|line| {
-            let (a, b) = line.split_once('-').ok_or(UpdateError::InvalidInput)?;
+            let (a, b) = line
+                .split_once('-')
+                .ok_or(UpdateError::InvalidInput(format!(
+                    "\"{}\" could not be split on '-'!",
+                    line
+                )))?;
 
-            let lower = a.parse::<i64>().map_err(|_| UpdateError::InvalidInput)?;
-            let upper = b.parse::<i64>().map_err(|_| UpdateError::InvalidInput)?;
+            let lower = a.parse::<i64>().map_err(|_| {
+                UpdateError::InvalidInput(format!("\"{}\" could not be parsed as an integer!", a))
+            })?;
+            let upper = b.parse::<i64>().map_err(|_| {
+                UpdateError::InvalidInput(format!("\"{}\" could not be parsed as an integer!", b))
+            })?;
 
             Ok(Range::new(lower, upper))
         })
-        .collect::<Result<Vec<_>, _>>()?;
+        .collect::<Result<Vec<Range>, UpdateError>>()?;
 
     let numbers = number_lines
         .iter()
         .skip(1)
         .filter(|l| !l.trim().is_empty())
-        .map(|line| line.parse::<i64>().map_err(|_| UpdateError::InvalidInput))
+        .map(|line| {
+            line.parse::<i64>().map_err(|_| {
+                UpdateError::InvalidInput(format!(
+                    "\"{}\" could not be parsed as an integer!",
+                    line
+                ))
+            })
+        })
         .collect::<Result<Vec<_>, _>>()?;
 
     Ok((ranges, numbers))

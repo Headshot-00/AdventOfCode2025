@@ -15,20 +15,29 @@ pub fn read_points<R: BufRead>(reader: R) -> Result<Vec<Point>, UpdateError> {
     let points: Vec<Point> = reader
         .lines()
         .map(|line| {
-            let line = line.map_err(|_| UpdateError::InvalidInput)?;
+            let line = line.map_err(|e| UpdateError::Io(e))?;
             let line = line.trim();
             if line.is_empty() {
                 return Err(UpdateError::EmptyInput); // we’ll filter empty later
             }
-            let (x_str, y_str) = line.split_once(',').ok_or(UpdateError::InvalidInput)?;
-            let x = x_str
-                .trim()
-                .parse::<i64>()
-                .map_err(|_| UpdateError::InvalidInput)?;
-            let y = y_str
-                .trim()
-                .parse::<i64>()
-                .map_err(|_| UpdateError::InvalidInput)?;
+            let (x_str, y_str) = line
+                .split_once(',')
+                .ok_or(UpdateError::InvalidInput(format!(
+                    "Line could not be split on comma! {}",
+                    line
+                )))?;
+            let x = x_str.trim().parse::<i64>().map_err(|_| {
+                UpdateError::InvalidInput(format!(
+                    "\"{}\" could not be parsed as an integer!",
+                    x_str
+                ))
+            })?;
+            let y = y_str.trim().parse::<i64>().map_err(|_| {
+                UpdateError::InvalidInput(format!(
+                    "\"{}\" could not be parsed as an integer!",
+                    y_str
+                ))
+            })?;
             Ok(Point { x, y })
         })
         .filter_map(|res| match res {

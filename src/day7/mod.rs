@@ -2,9 +2,7 @@ use crate::adv_errors::UpdateError;
 use std::collections::VecDeque;
 use std::io::BufRead;
 
-pub fn solve<R: BufRead>(
-    reader: R,
-) -> Result<(u64, u64), UpdateError> {
+pub fn solve<R: BufRead>(reader: R) -> Result<(u64, u64), UpdateError> {
     let mut lines: VecDeque<String> = reader
         .lines()
         .collect::<Result<_, _>>()
@@ -16,7 +14,12 @@ pub fn solve<R: BufRead>(
         .map(|b| match b {
             b'S' => Ok(1),
             b'.' => Ok(0),
-            _ => return Err(UpdateError::InvalidInput),
+            _ => {
+                return Err(UpdateError::InvalidInput(format!(
+                    "The character \"{}\" is not defined for the first line!",
+                    b
+                )));
+            }
         })
         .collect::<Result<_, _>>()?;
     let length = beam.len();
@@ -26,14 +29,19 @@ pub fn solve<R: BufRead>(
     for line in lines {
         let chars: Vec<char> = line.chars().collect();
         if chars.len() != length {
-            return Err(UpdateError::InvalidInput);
+            return Err(UpdateError::InvalidInput(format!(
+                "Line has wrong length! Length is: {}, Should be: {}. For line: {}",
+                chars.len(),
+                length,
+                line
+            )));
         }
         let mut next_beam = beam.clone();
         for (i, ch) in chars.into_iter().enumerate() {
             if beam[i] > 0 && ch == '^' {
                 count += 1;
                 next_beam[i] = 0;
-    
+
                 if i > 0 {
                     next_beam[i - 1] += beam[i];
                 }

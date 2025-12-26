@@ -117,10 +117,23 @@ impl UnionFind {
     }
 
     fn find(&mut self, x: usize) -> usize {
-        if self.parent[x] != x {
-            self.parent[x] = self.find(self.parent[x]);
+        let mut v = x;
+
+        // Climb up to find the root
+        while self.parent[v] != v {
+            v = self.parent[v];
         }
-        self.parent[x]
+        let root = v;
+
+        // Path compression on the way back
+        let mut v = x;
+        while self.parent[v] != v {
+            let next = self.parent[v];
+            self.parent[v] = root;
+            v = next;
+        }
+
+        root
     }
 
     fn union(&mut self, a: usize, b: usize) {

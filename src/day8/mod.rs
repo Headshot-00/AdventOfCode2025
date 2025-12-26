@@ -1,7 +1,6 @@
 use crate::adv_errors::UpdateError;
 use rayon::prelude::*;
 use std::cmp::Ordering;
-use std::collections::HashMap;
 use std::io::BufRead;
 
 /// Represents a 3D point with integer coordinates
@@ -189,13 +188,13 @@ pub fn solve<R: BufRead>(reader: R, cluster_mult_num: usize) -> Result<(i64, i64
     }
 
     // compute sizes of connected components after 1000 edges
-    let mut counts: HashMap<usize, usize> = HashMap::new();
+    let mut counts = vec![0usize; n];
     for i in 0..n {
         let root = uf.find(i);
-        *counts.entry(root).or_insert(0) += 1;
+        counts[root] += 1;
     }
 
-    let mut sizes: Vec<usize> = counts.values().copied().collect();
+    let mut sizes: Vec<usize> = counts.into_iter().filter(|&c| c > 0).collect();
     sizes.sort_unstable_by(|a, b| b.cmp(a));
     if sizes.len() < 3 {
         return Err(UpdateError::InvalidInput(

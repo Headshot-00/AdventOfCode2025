@@ -1,4 +1,5 @@
 use crate::adv_errors::UpdateError;
+use rayon::prelude::*;
 use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::io::BufRead;
@@ -151,17 +152,21 @@ pub fn solve<R: BufRead>(reader: R, cluster_mult_num: usize) -> Result<(i64, i64
         ));
     }
 
-    let mut edges: Vec<Edge> = Vec::with_capacity(n * (n - 1) / 2);
-    for i in 0..n {
-        for j in (i + 1)..n {
-            edges.push(Edge {
-                dist2: points[i].dist2(&points[j]),
+    let pts = &points;
+
+    let mut edges: Vec<Edge> = (0..n)
+        .into_par_iter()
+        .flat_map_iter(|i| {
+            let pi = pts[i];
+            (i + 1..n).map(move |j| Edge {
+                dist2: pi.dist2(&pts[j]),
                 a: i,
                 b: j,
-            });
-        }
-    }
-    edges.sort_unstable_by_key(|e| e.dist2);
+            })
+        })
+        .collect();
+
+    edges.par_sort_unstable_by_key(|e| e.dist2);
 
     // Compute product of the three largest clusters after cluster_mult_num connections
     let k = edges.len().min(cluster_mult_num);

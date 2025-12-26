@@ -1,15 +1,15 @@
+use crate::adv_errors::UpdateError;
+use log::warn;
 use rayon::prelude::*;
 use std::sync::atomic::{AtomicU32, Ordering};
-use log::warn;
-use crate::adv_errors::UpdateError;
 
 pub struct Day4Solver {
-    matrix: Vec<Vec<i8>>,       // only used for input parsing
-    kernel: Vec<f32>,           // 3x3 kernel
+    matrix: Vec<Vec<i8>>, // only used for input parsing
+    kernel: Vec<f32>,     // 3x3 kernel
     activation: f32,
     width: usize,
     height: usize,
-    buffer_a: Vec<f32>,         // ping-pong buffer
+    buffer_a: Vec<f32>, // ping-pong buffer
     buffer_b: Vec<f32>,
     iteration: u8,
 }
@@ -39,7 +39,10 @@ impl Day4Solver {
             .map(|c| match c {
                 '@' => Ok(1),
                 '.' => Ok(0),
-                _ => Err(UpdateError::InvalidInput),
+                _ => Err(UpdateError::InvalidInput(format!(
+                    "Invalid grid character: {}",
+                    c
+                ))),
             })
             .collect::<Result<_, _>>()?;
 
@@ -54,7 +57,8 @@ impl Day4Solver {
         let len = self.width * self.height;
 
         // flatten input into buffer_a
-        self.buffer_a = self.matrix
+        self.buffer_a = self
+            .matrix
             .iter()
             .flat_map(|r| r.iter().map(|&v| v as f32))
             .collect();
@@ -131,9 +135,15 @@ impl Default for Day4Solver {
     fn default() -> Self {
         Self::new(
             vec![
-                1.0 / 8.0, 1.0 / 8.0, 1.0 / 8.0,
-                1.0 / 8.0, 0.0,       1.0 / 8.0,
-                1.0 / 8.0, 1.0 / 8.0, 1.0 / 8.0,
+                1.0 / 8.0,
+                1.0 / 8.0,
+                1.0 / 8.0,
+                1.0 / 8.0,
+                0.0,
+                1.0 / 8.0,
+                1.0 / 8.0,
+                1.0 / 8.0,
+                1.0 / 8.0,
             ],
             0.5,
         )

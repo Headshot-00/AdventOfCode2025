@@ -1,6 +1,8 @@
 use crate::adv_errors::UpdateError;
+use itertools::iproduct;
 use rayon::prelude::*;
 use std::cmp::Ordering;
+use std::collections::HashMap;
 use std::io::BufRead;
 
 /// Represents a 3D point with integer coordinates
@@ -156,7 +158,6 @@ impl UnionFind {
 /// This is basically kruskal's algorithm to find the minimum spanning tree
 pub fn solve<R: BufRead>(reader: R, cluster_mult_num: usize) -> Result<(i64, i64), UpdateError> {
     let points = read_points(reader)?;
-
     let n = points.len();
     if n < 2 {
         return Err(UpdateError::InvalidInput(
@@ -164,46 +165,95 @@ pub fn solve<R: BufRead>(reader: R, cluster_mult_num: usize) -> Result<(i64, i64
         ));
     }
 
+    // Compute bounding box
+    let mut min_x = i64::MAX;
+    let mut max_x = i64::MIN;
+    let mut min_y = i64::MAX;
+    let mut max_y = i64::MIN;
+    let mut min_z = i64::MAX;
+    let mut max_z = i64::MIN;
+
+    for p in &points {
+        min_x = min_x.min(p.x);
+        max_x = max_x.max(p.x);
+        min_y = min_y.min(p.y);
+        max_y = max_y.max(p.y);
+        min_z = min_z.min(p.z);
+        max_z = max_z.max(p.z);
+    }
+
+    let n_f64 = n as f64;
+    let span_x = max_x - min_x;
+    let span_y = max_y - min_y;
+    let span_z = max_z - min_z;
+
+    // Simple heuristic for cell size
+    let cell_size = ((span_x.max(span_y).max(span_z)) as f64 / n_f64.cbrt()).ceil() as i64 + 1;
+
+    // Hash points into grid
+    let mut grid: HashMap<(i64, i64, i64), Vec<usize>> = HashMap::new();
+    for (i, p) in points.iter().enumerate() {
+        let cx = (p.x - min_x) / cell_size;
+        let cy = (p.y - min_y) / cell_size;
+        let cz = (p.z - min_z) / cell_size;
+        grid.entry((cx, cy, cz)).or_default().push(i);
+    }
+
     let pts = &points;
 
+    // Generate edges using neighbor cells only
     let mut edges: Vec<Edge> = (0..n)
         .into_par_iter()
         .flat_map_iter(|i| {
-            let pi = pts[i];
-            (i + 1..n).map(move |j| Edge {
-                dist2: pi.dist2(&pts[j]),
-                a: i,
-                b: j,
-            })
+            let p = pts[i];
+            let cx = (p.x - min_x) / cell_size;
+            let cy = (p.y - min_y) / cell_size;
+            let cz = (p.z - min_z) / cell_size;
+
+            let grid_ref = &grid;
+
+            iproduct!(-1..=1, -1..=1, -1..=1)
+                .flat_map(move |(dx, dy, dz)| {
+                    grid_ref
+                        .get(&(cx + dx, cy + dy, cz + dz))
+                        .into_iter()
+                        .flat_map(|indices| indices.iter())
+                })
+                .filter(move |&&j| i < j)
+                .map(move |&j| Edge {
+                    dist2: p.dist2(&pts[j]),
+                    a: i,
+                    b: j,
+                })
         })
         .collect();
 
+    // Sort edges for Kruskal
     edges.par_sort_unstable_by_key(|e| e.dist2);
 
-    // Compute product of the three largest clusters after cluster_mult_num connections
+    // First phase: cluster_mult_num edges
     let k = edges.len().min(cluster_mult_num);
     let mut uf = UnionFind::new(n);
     for e in &edges[..k] {
         uf.union(e.a, e.b);
     }
 
-    // compute sizes of connected components after 1000 edges
+    // Compute cluster sizes
     let mut counts = vec![0usize; n];
     for i in 0..n {
-        let root = uf.find(i);
-        counts[root] += 1;
+        counts[uf.find(i)] += 1;
     }
 
     let mut sizes: Vec<usize> = counts.into_iter().filter(|&c| c > 0).collect();
     sizes.par_sort_unstable_by(|a, b| b.cmp(a));
     if sizes.len() < 3 {
         return Err(UpdateError::InvalidInput(
-            "Fewer than three clusters exist after connecting 1000 pairs!".into(),
+            "Fewer than three clusters exist after connecting edges!".into(),
         ));
     }
     let cluster_product = sizes[0] as i64 * sizes[1] as i64 * sizes[2] as i64;
 
-    // Do full minimum spanning tree then get the final edge
+    // Full MST to get last edge
     let mut last_edge: Option<(usize, usize)> = None;
     for e in &edges {
         let ra = uf.find(e.a);
@@ -214,14 +264,9 @@ pub fn solve<R: BufRead>(reader: R, cluster_mult_num: usize) -> Result<(i64, i64
         }
     }
 
-    let (i, j) = match last_edge {
-        Some(edge) => edge, // bind (i, j) here
-        None => return Err(UpdateError::InvalidInput("Could not find any edge!".into())), // return early if no edge
-    };
-
+    let (i, j) = last_edge.ok_or_else(|| UpdateError::InvalidInput("No MST edge found!".into()))?;
     let p1 = points[i];
     let p2 = points[j];
-
     let x_product = p1.x * p2.x;
 
     Ok((cluster_product, x_product))

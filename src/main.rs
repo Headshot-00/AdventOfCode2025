@@ -4,6 +4,7 @@ mod day2;
 mod day3;
 mod day4;
 mod day5;
+mod day6;
 mod day7;
 mod day8;
 mod day9;
@@ -41,7 +42,7 @@ enum Mode {
     Day3,
     Day4,
     Day5,
-    //Day6,
+    Day6,
     Day7,
     Day8,
     Day9,
@@ -217,6 +218,20 @@ fn day5(input: &std::path::PathBuf) -> io::Result<()> {
     Ok(())
 }
 
+fn day6(input: &std::path::PathBuf) -> io::Result<()> {
+    let input = File::open(input)?;
+    let reader = BufReader::new(input);
+
+    let (problem_sum, _) = day6::solve(reader).unwrap();
+
+    println!(
+        "The sum of the solutions to all the problems is: {}",
+        problem_sum
+    );
+
+    Ok(())
+}
+
 fn day7(input: &std::path::PathBuf) -> io::Result<()> {
     let input = File::open(input)?;
     let reader = BufReader::new(input);
@@ -278,6 +293,7 @@ fn main() -> io::Result<()> {
         ("Day3", Mode::Day3, day3),
         ("Day4", Mode::Day4, day4),
         ("Day5", Mode::Day5, day5),
+        ("Day6", Mode::Day6, day6),
         ("Day7", Mode::Day7, day7),
         ("Day8", Mode::Day8, day8),
         ("Day9", Mode::Day9, day9),

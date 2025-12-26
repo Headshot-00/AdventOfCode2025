@@ -1,25 +1,24 @@
 use crate::adv_errors::UpdateError;
 use log::warn;
 use rayon::prelude::*;
-use std::sync::atomic::{AtomicU32, Ordering};
 
 pub struct Day4Solver {
     matrix: Vec<Vec<i8>>, // only used for input parsing
-    kernel: Vec<f32>,     // 3x3 kernel
-    activation: f32,
+    kernel: Vec<u8>,      // 3x3 kernel
+    threshold: u8,
     width: usize,
     height: usize,
-    buffer_a: Vec<f32>, // ping-pong buffer
-    buffer_b: Vec<f32>,
-    iteration: u8,
+    buffer_a: Vec<i8>, // ping-pong buffer
+    buffer_b: Vec<i8>,
+    iteration: i8,
 }
 
 impl Day4Solver {
-    pub fn new(kernel: Vec<f32>, activation: f32) -> Self {
+    pub fn new(kernel: Vec<u8>, threshold: u8) -> Self {
         Day4Solver {
             matrix: Vec::new(),
             kernel,
-            activation,
+            threshold,
             width: 0,
             height: 0,
             buffer_a: Vec::new(),
@@ -60,11 +59,11 @@ impl Day4Solver {
         self.buffer_a = self
             .matrix
             .iter()
-            .flat_map(|r| r.iter().map(|&v| v as f32))
+            .flat_map(|r| r.iter().map(|&v| v as i8))
             .collect();
 
         // initialize ping-pong buffer_b
-        self.buffer_b = vec![0.0; len];
+        self.buffer_b = vec![0; len];
 
         self.iteration = 0;
     }
@@ -78,25 +77,26 @@ impl Day4Solver {
 
         self.iteration += 1;
 
-        let accessible = AtomicU32::new(0);
         let width = self.width;
         let height = self.height;
         let k = &self.kernel;
-        let activation = self.activation;
 
-        output_buf
+        // Compute accessible counts per row in parallel
+        let row_accessibles: Vec<u32> = output_buf
             .par_chunks_mut(width)
             .enumerate()
-            .for_each(|(y, row)| {
+            .map(|(y, row)| {
+                let mut accessible_row: u32 = 0;
+
                 for x in 0..width {
                     let idx = y * width + x;
 
-                    if input_buf[idx] <= 0.0 {
-                        row[x] = 0.0;
+                    if input_buf[idx] <= 0 {
+                        row[x] = 0;
                         continue;
                     }
 
-                    let mut sum = 0.0;
+                    let mut active_neighbors: u8 = 0;
 
                     for dy in -1..=1 {
                         let sy = y as isize + dy;
@@ -110,42 +110,34 @@ impl Day4Solver {
                                 continue;
                             }
 
-                            let n = input_buf[sy as usize * width + sx as usize];
-                            if n > 0.0 {
+                            if input_buf[sy as usize * width + sx as usize] > 0 {
                                 let ki = (dy + 1) * 3 + (dx + 1);
-                                sum += n * k[ki as usize];
+                                active_neighbors += k[ki as usize];
                             }
                         }
                     }
 
-                    if sum >= activation {
-                        row[x] = 1.0;
+                    if active_neighbors >= self.threshold {
+                        row[x] = 1;
                     } else {
-                        row[x] = -1.0;
-                        accessible.fetch_add(1, Ordering::Relaxed);
+                        row[x] = -1;
+                        accessible_row += 1;
                     }
                 }
-            });
 
-        Ok(accessible.load(Ordering::Relaxed))
+                accessible_row
+            })
+            .collect();
+
+        // Sum the accessible counts from all rows
+        let accessible_total: u32 = row_accessibles.iter().sum();
+
+        Ok(accessible_total)
     }
 }
 
 impl Default for Day4Solver {
     fn default() -> Self {
-        Self::new(
-            vec![
-                1.0 / 8.0,
-                1.0 / 8.0,
-                1.0 / 8.0,
-                1.0 / 8.0,
-                0.0,
-                1.0 / 8.0,
-                1.0 / 8.0,
-                1.0 / 8.0,
-                1.0 / 8.0,
-            ],
-            0.5,
-        )
+        Self::new(vec![1, 1, 1, 1, 0, 1, 1, 1, 1], 4)
     }
 }

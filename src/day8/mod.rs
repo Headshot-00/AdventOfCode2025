@@ -195,7 +195,7 @@ pub fn solve<R: BufRead>(reader: R, cluster_mult_num: usize) -> Result<(i64, i64
     }
 
     let mut sizes: Vec<usize> = counts.into_iter().filter(|&c| c > 0).collect();
-    sizes.sort_unstable_by(|a, b| b.cmp(a));
+    sizes.par_sort_unstable_by(|a, b| b.cmp(a));
     if sizes.len() < 3 {
         return Err(UpdateError::InvalidInput(
             "Fewer than three clusters exist after connecting 1000 pairs!".into(),

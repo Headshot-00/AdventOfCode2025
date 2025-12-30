@@ -268,17 +268,13 @@ fn day9(input: &std::path::PathBuf) -> io::Result<()> {
     let input = File::open(input)?;
     let reader = BufReader::new(input);
 
-    let points = day9::read_points(reader).unwrap();
-
-    let biggest = day9::find_biggest_rectangle_simple(&points);
+    let (biggest, biggest_inside) = day9::solve(reader).unwrap();
 
     println!("The biggest possible rectangle has area {} units", biggest);
 
-    let biggest = day9::find_biggest_rectangle_polygon(points);
-
     println!(
         "The biggest possible rectangle containing only green or red tiles has area {} units",
-        biggest
+        biggest_inside
     );
 
     Ok(())

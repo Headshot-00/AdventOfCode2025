@@ -1,17 +1,63 @@
 use crate::adv_errors::UpdateError;
+use rayon::prelude::*;
 use std::collections::HashMap;
 use std::io::BufRead;
 
 /// Represents a 2D point with integer coordinates
 #[derive(Copy, Clone, Debug)]
 pub struct Point {
-    x: i64,
-    y: i64,
+    x: u32,
+    y: u32,
+}
+
+/// Represents an axis-aligned edge
+#[derive(Copy, Clone, Debug)]
+pub struct AAEdge {
+    start: u32,
+    end: u32,
+    height: u32,
+}
+
+impl AAEdge {
+    fn new(u1: u32, u2: u32, height: u32) -> Self {
+        AAEdge {
+            start: u1.min(u2),
+            end: u1.max(u2),
+            height,
+        }
+    }
+}
+
+/// Represents an axis-aligned rectangle, defined by two opposing points
+#[derive(PartialEq, Eq)]
+pub struct AARect {
+    x1: u32,
+    y1: u32,
+    x2: u32,
+    y2: u32,
+}
+
+impl AARect {
+    fn new(p1: &Point, p2: &Point) -> Self {
+        AARect {
+            x1: p1.x.min(p2.x),
+            x2: p1.x.max(p2.x),
+            y1: p1.y.min(p2.y),
+            y2: p1.y.max(p2.y),
+        }
+    }
+
+    fn grid_area(&self) -> u64 {
+        let xd = self.x2 - self.x1 + 1;
+        let yd = self.y2 - self.y1 + 1;
+        let area: u64 = xd as u64 * yd as u64;
+        area
+    }
 }
 
 /// Reads points from a buffered input, expects lines in "x,y" format.
 /// Skips empty lines and returns an error for invalid input.
-pub fn read_points<R: BufRead>(reader: R) -> Result<Vec<Point>, UpdateError> {
+fn read_points<R: BufRead>(reader: R) -> Result<Vec<Point>, UpdateError> {
     let points: Vec<Point> = reader
         .lines()
         .map(|line| {
@@ -26,13 +72,13 @@ pub fn read_points<R: BufRead>(reader: R) -> Result<Vec<Point>, UpdateError> {
                     "Line could not be split on comma! {}",
                     line
                 )))?;
-            let x = x_str.trim().parse::<i64>().map_err(|_| {
+            let x = x_str.trim().parse::<u32>().map_err(|_| {
                 UpdateError::InvalidInput(format!(
                     "\"{}\" could not be parsed as an integer!",
                     x_str
                 ))
             })?;
-            let y = y_str.trim().parse::<i64>().map_err(|_| {
+            let y = y_str.trim().parse::<u32>().map_err(|_| {
                 UpdateError::InvalidInput(format!(
                     "\"{}\" could not be parsed as an integer!",
                     y_str
@@ -54,31 +100,15 @@ pub fn read_points<R: BufRead>(reader: R) -> Result<Vec<Point>, UpdateError> {
     Ok(points)
 }
 
-/// Brute-force approach to find largest rectangle defined by any two points.
-/// Computes area = (|x1 - x2| + 1) * (|y1 - y2| + 1) for each point pairing.
-pub fn find_biggest_rectangle_simple(points: &[Point]) -> i64 {
-    points
-        .iter()
-        .enumerate()
-        .flat_map(|(i, p1)| {
-            points
-                .iter()
-                .skip(i + 1)
-                .map(move |p2| ((p1.x - p2.x).abs() + 1) * ((p1.y - p2.y).abs() + 1))
-        })
-        .max()
-        .unwrap_or(0) // returns 0 if there are no points
-}
-
 /// Coordinate compression: maps original x/y coordinates to small indices for grid usage.
 /// Returns unique x/y lists and maps from original coordinate -> compressed index.
-fn compress(points: &[Point]) -> (Vec<i64>, Vec<i64>, HashMap<i64, usize>, HashMap<i64, usize>) {
-    let mut xs: Vec<i64> = points.iter().map(|p| p.x).collect();
-    let mut ys: Vec<i64> = points.iter().map(|p| p.y).collect();
+fn compress(points: &[Point]) -> (Vec<u32>, Vec<u32>, HashMap<u32, usize>, HashMap<u32, usize>) {
+    let mut xs: Vec<u32> = points.iter().map(|p| p.x).collect();
+    let mut ys: Vec<u32> = points.iter().map(|p| p.y).collect();
 
-    xs.sort();
+    xs.par_sort_unstable();
     xs.dedup();
-    ys.sort();
+    ys.par_sort_unstable();
     ys.dedup();
 
     // create mapping from original coordinate to compressed grid index
@@ -88,173 +118,128 @@ fn compress(points: &[Point]) -> (Vec<i64>, Vec<i64>, HashMap<i64, usize>, HashM
     (xs, ys, x_map, y_map)
 }
 
-/// Creates an empty grid filled with '.' for given width and height
-fn make_grid(w: usize, h: usize) -> Vec<Vec<char>> {
-    vec![vec!['.'; w]; h]
+fn get_rects(points: &[Point]) -> Vec<AARect> {
+    points
+        .iter()
+        .enumerate()
+        .flat_map(|(i, p1)| points.iter().skip(i + 1).map(move |p2| AARect::new(p1, p2)))
+        .collect()
 }
 
-/// Rasterizes polygon edges onto the grid using axis-aligned segments
-fn rasterize(grid: &mut [Vec<char>], pts: &[(usize, usize)]) {
-    let n = pts.len();
+/// Extracts axis-aligned edges from a polygon and separates them into horizontal and vertical edges
+fn extract_edges(
+    points: &[Point],
+    x_map: &HashMap<u32, usize>,
+    y_map: &HashMap<u32, usize>,
+) -> Result<(Vec<AAEdge>, Vec<AAEdge>), UpdateError> {
+    let mut horizontal = Vec::new();
+    let mut vertical = Vec::new();
+
+    if points.is_empty() {
+        return Err(UpdateError::EmptyInput);
+    }
+
+    let n = points.len();
     for i in 0..n {
-        let (x1, y1) = pts[i];
-        let (x2, y2) = pts[(i + 1) % n]; // wrap-around to close polygon
-
-        if x1 == x2 {
-            // vertical
-            let (a, b) = if y1 <= y2 { (y1, y2) } else { (y2, y1) };
-            for y in a..=b {
-                grid[y][x1] = '#';
-            }
-        } else if y1 == y2 {
-            // horizontal
-            let (a, b) = if x1 <= x2 { (x1, x2) } else { (x2, x1) };
-            for x in a..=b {
-                grid[y1][x] = '#';
-            }
+        let p1 = points[i];
+        let p2 = points[(i + 1) % n]; // wrap around for last edge
+        if p1.x == p2.x {
+            // vertical edge
+            let x = *x_map
+                .get(&p1.x)
+                .ok_or_else(|| UpdateError::InvalidInput(format!("x coord {} not found", p1.x)))?
+                as u32;
+            let start = *y_map
+                .get(&p1.y)
+                .ok_or_else(|| UpdateError::InvalidInput(format!("y coord {} not found", p1.y)))?
+                as u32;
+            let end = *y_map
+                .get(&p2.y)
+                .ok_or_else(|| UpdateError::InvalidInput(format!("y coord {} not found", p2.y)))?
+                as u32;
+            vertical.push(AAEdge::new(start, end, x));
+        } else if p1.y == p2.y {
+            // horizontal edge
+            let y = *y_map
+                .get(&p1.y)
+                .ok_or_else(|| UpdateError::InvalidInput(format!("y coord {} not found", p1.y)))?
+                as u32;
+            let start = *x_map
+                .get(&p1.x)
+                .ok_or_else(|| UpdateError::InvalidInput(format!("x coord {} not found", p1.x)))?
+                as u32;
+            let end = *x_map
+                .get(&p2.x)
+                .ok_or_else(|| UpdateError::InvalidInput(format!("x coord {} not found", p2.x)))?
+                as u32;
+            horizontal.push(AAEdge::new(start, end, y));
+        } else {
+            // ignore non-axis-aligned edges
+            return Err(UpdateError::InvalidInput(format!(
+                "Non-axis-aligned edge detected: {:?} -> {:?}",
+                p1, p2
+            )));
         }
     }
+
+    Ok((horizontal, vertical))
 }
 
-/// Flood-fill algorithm to mark all empty cells connected to a start point
-/// Marks visited empty cells with 'X'
-fn flood_fill(grid: &mut [Vec<char>], start: (usize, usize)) {
-    let mut stack = vec![start];
-    let dirs = [(0i64, 1), (0, -1), (1, 0), (-1, 0)];
-
-    while let Some((x, y)) = stack.pop() {
-        if grid[y][x] != '.' {
-            continue; // already filled or edge
-        }
-        grid[y][x] = 'X'; // mark as visited
-
-        for (dx, dy) in dirs {
-            let nx = x as i64 + dx;
-            let ny = y as i64 + dy;
-            if nx >= 0 && ny >= 0 {
-                let (nx, ny) = (nx as usize, ny as usize);
-                if ny < grid.len() && nx < grid[0].len() {
-                    if grid[ny][nx] == '.' {
-                        stack.push((nx, ny));
-                    }
-                }
-            }
-        }
-    }
-}
-
-/// Finds a point inside the polygon using the ray-casting method
-/// A point is inside if the horizontal ray to the left crosses an odd number of edges
-fn find_inside(grid: &[Vec<char>]) -> (usize, usize) {
-    for y in 0..grid.len() {
-        for x in 0..grid[0].len() {
-            if grid[y][x] != '.' {
-                continue;
-            }
-
-            let mut hits = 0;
-            let mut prev = '.';
-
-            for i in (0..=x).rev() {
-                let cur = grid[y][i];
-                if cur != prev {
-                    hits += 1;
-                }
-                prev = cur;
-            }
-
-            if hits % 2 == 1 {
-                return (x, y); // found an inside point
-            }
-        }
-    }
-    panic!("no inside point found"); // should never happen
-}
-
-/// Checks if the rectangle defined by points a and b is fully enclosed by the polygon
-fn is_enclosed(
-    a: Point,
-    b: Point,
-    grid: &[Vec<char>],
-    x_map: &HashMap<i64, usize>,
-    y_map: &HashMap<i64, usize>,
+/// Find a rectangle inside the polygon by checking if any edge crosses into the rectangle
+/// Technically this is not correct because a rectangle could be considered to be "inside"
+/// a convex polygon based on this criteria even if it is actually in a "pocket".
+fn is_rect_inside(
+    rect: &AARect,
+    h_edges: &[AAEdge],
+    v_edges: &[AAEdge],
+    x_map: &HashMap<u32, usize>,
+    y_map: &HashMap<u32, usize>,
 ) -> bool {
-    let (x1, x2) = {
-        let xa = x_map[&a.x];
-        let xb = x_map[&b.x];
-        if xa <= xb { (xa, xb) } else { (xb, xa) }
-    };
-
-    let (y1, y2) = {
-        let ya = y_map[&a.y];
-        let yb = y_map[&b.y];
-        if ya <= yb { (ya, yb) } else { (yb, ya) }
-    };
-
-    // Check top and bottom edges of rectangle
-    for x in x1..=x2 {
-        if grid[y1][x] == '.' || grid[y2][x] == '.' {
-            return false;
+    let x1 = *x_map.get(&rect.x1).unwrap_or(&0) as u32;
+    let x2 = *x_map.get(&rect.x2).unwrap_or(&0) as u32;
+    let y1 = *y_map.get(&rect.y1).unwrap_or(&0) as u32;
+    let y2 = *y_map.get(&rect.y2).unwrap_or(&0) as u32;
+    for edge in h_edges {
+        // Horizontal edges
+        if edge.height > y1 && edge.height < y2 {
+            if edge.end > x1 && edge.start < x2 {
+                // Edge crosses rectangle horizontally
+                return false;
+            }
         }
     }
-
-    // Check left and right edges of rectangle
-    for y in y1..=y2 {
-        if grid[y][x1] == '.' || grid[y][x2] == '.' {
-            return false;
+    for edge in v_edges {
+        // Vertical edges
+        if edge.height > x1 && edge.height < x2 {
+            if edge.end > y1 && edge.start < y2 {
+                // Edge crosses rectangle vertically
+                return false;
+            }
         }
     }
-
     true
 }
 
-/// Brute-force search for largest rectangle fully enclosed by polygon
-fn biggest_rectangle(
-    points: &[Point],
-    grid: &[Vec<char>],
-    x_map: &HashMap<i64, usize>,
-    y_map: &HashMap<i64, usize>,
-) -> i64 {
-    let mut max = 0;
-
-    for i in 0..points.len() {
-        for j in i + 1..points.len() {
-            if is_enclosed(points[i], points[j], grid, x_map, y_map) {
-                let area = ((points[i].x - points[j].x).abs() + 1)
-                    * ((points[i].y - points[j].y).abs() + 1);
-                max = max.max(area);
-            }
-        }
-    }
-    max
-}
-
 /// Helper function to find the largest rectangle fully inside a polygon
-pub fn find_biggest_rectangle_polygon(points: Vec<Point>) -> i64 {
-    // Step 1: compress coordinates for efficient grid representation
-    let (uniq_x, uniq_y, x_map, y_map) = compress(&points);
+pub fn solve<R: BufRead>(reader: R) -> Result<(u64, u64), UpdateError> {
+    let points = read_points(reader)?;
+    let (_uniq_x, _uniq_y, x_map, y_map) = compress(&points);
 
-    // Step 2: create empty grid
-    let mut grid = make_grid(uniq_x.len(), uniq_y.len());
+    let (horizontal_edges, vertical_edges) = extract_edges(&points, &x_map, &y_map)?;
 
-    // Step 3: map points to compressed grid and mark vertices
-    let z_points: Vec<(usize, usize)> = points
+    let mut rects = get_rects(&points);
+    // Sort rectangles by
+    rects.par_sort_unstable_by(|a, b| b.grid_area().cmp(&a.grid_area()));
+    rects.dedup();
+
+    let largest_inside = rects
         .iter()
-        .map(|p| {
-            let x = x_map[&p.x];
-            let y = y_map[&p.y];
-            grid[y][x] = '#';
-            (x, y)
-        })
-        .collect();
+        .find(|r| is_rect_inside(r, &horizontal_edges, &vertical_edges, &x_map, &y_map))
+        .map(|r| r.grid_area())
+        .ok_or_else(|| {
+            UpdateError::InvalidInput("No rectangle found fully inside polygon".into())
+        })?;
 
-    // Step 4: rasterize polygon edges on grid
-    rasterize(&mut grid, &z_points);
-
-    // Step 5: flood-fill from an inside point to mark inside/outside regions
-    let inside_point = find_inside(&grid);
-    flood_fill(&mut grid, inside_point);
-
-    // Step 6: brute-force largest rectangle fully enclosed by polygon
-    biggest_rectangle(&points, &grid, &x_map, &y_map)
+    // first is the largest rectangle of all, second is the largest rectangle inside polygon
+    Ok((rects[0].grid_area(), largest_inside))
 }

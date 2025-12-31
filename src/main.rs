@@ -228,11 +228,16 @@ fn day6(input: &std::path::PathBuf) -> Result<(), UpdateError> {
     let input = File::open(input)?;
     let reader = BufReader::new(input);
 
-    let (problem_sum, _) = day6::solve(reader).unwrap();
+    let (lr_sum, td_sum) = day6::solve(reader).unwrap();
 
     println!(
-        "The sum of the solutions to all the problems is: {}",
-        problem_sum
+        "The sum of the solutions to all the problems when read horizontally is: {}",
+        lr_sum
+    );
+
+    println!(
+        "The sum of the solutions to all the problems when read vertically is: {}",
+        td_sum
     );
 
     Ok(())

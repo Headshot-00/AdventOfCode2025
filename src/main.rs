@@ -9,6 +9,8 @@ mod day7;
 mod day8;
 mod day9;
 
+use adv_errors::UpdateError;
+
 use day1::sm::Day1StateMachine;
 
 use day2::accumulator::Day2Accumulator;
@@ -52,7 +54,11 @@ enum Mode {
 }
 
 // tiny helper to wrap timing around any day function
-fn time_day(name: &str, f: fn(&PathBuf) -> io::Result<()>, input: &PathBuf) -> io::Result<()> {
+fn time_day(
+    name: &str,
+    f: fn(&PathBuf) -> Result<(), UpdateError>,
+    input: &PathBuf,
+) -> Result<(), UpdateError> {
     println!("=== {} start ===", name);
     let start = Instant::now();
     let result = f(input);
@@ -74,7 +80,7 @@ fn day_input_path(pattern: &PathBuf, day_name: &str) -> PathBuf {
     }
 }
 
-fn day1(input: &std::path::PathBuf) -> io::Result<()> {
+fn day1(input: &std::path::PathBuf) -> Result<(), UpdateError> {
     let input = File::open(input)?;
     let reader = BufReader::new(input);
 
@@ -90,7 +96,7 @@ fn day1(input: &std::path::PathBuf) -> io::Result<()> {
     Ok(())
 }
 
-fn day2(input: &std::path::PathBuf) -> io::Result<()> {
+fn day2(input: &std::path::PathBuf) -> Result<(), UpdateError> {
     let file = File::open(input)?;
     let mut reader = BufReader::new(file);
     let mut acc = Day2Accumulator::new();
@@ -142,7 +148,7 @@ fn day2(input: &std::path::PathBuf) -> io::Result<()> {
     Ok(())
 }
 
-fn day3(input: &std::path::PathBuf) -> io::Result<()> {
+fn day3(input: &std::path::PathBuf) -> Result<(), UpdateError> {
     let input = File::open(input)?;
     let reader = BufReader::new(input);
 
@@ -165,7 +171,7 @@ fn day3(input: &std::path::PathBuf) -> io::Result<()> {
     Ok(())
 }
 
-fn day4(input: &std::path::PathBuf) -> io::Result<()> {
+fn day4(input: &std::path::PathBuf) -> Result<(), UpdateError> {
     let input = File::open(input)?;
     let reader = BufReader::new(input);
 
@@ -204,7 +210,7 @@ fn day4(input: &std::path::PathBuf) -> io::Result<()> {
     Ok(())
 }
 
-fn day5(input: &std::path::PathBuf) -> io::Result<()> {
+fn day5(input: &std::path::PathBuf) -> Result<(), UpdateError> {
     let input = File::open(input)?;
     let reader = BufReader::new(input);
 
@@ -218,7 +224,7 @@ fn day5(input: &std::path::PathBuf) -> io::Result<()> {
     Ok(())
 }
 
-fn day6(input: &std::path::PathBuf) -> io::Result<()> {
+fn day6(input: &std::path::PathBuf) -> Result<(), UpdateError> {
     let input = File::open(input)?;
     let reader = BufReader::new(input);
 
@@ -232,7 +238,7 @@ fn day6(input: &std::path::PathBuf) -> io::Result<()> {
     Ok(())
 }
 
-fn day7(input: &std::path::PathBuf) -> io::Result<()> {
+fn day7(input: &std::path::PathBuf) -> Result<(), UpdateError> {
     let input = File::open(input)?;
     let reader = BufReader::new(input);
 
@@ -245,7 +251,7 @@ fn day7(input: &std::path::PathBuf) -> io::Result<()> {
     Ok(())
 }
 
-fn day8(input: &std::path::PathBuf) -> io::Result<()> {
+fn day8(input: &std::path::PathBuf) -> Result<(), UpdateError> {
     let input = File::open(input)?;
     let reader = BufReader::new(input);
 
@@ -264,7 +270,7 @@ fn day8(input: &std::path::PathBuf) -> io::Result<()> {
     Ok(())
 }
 
-fn day9(input: &std::path::PathBuf) -> io::Result<()> {
+fn day9(input: &std::path::PathBuf) -> Result<(), UpdateError> {
     let input = File::open(input)?;
     let reader = BufReader::new(input);
 
@@ -283,7 +289,7 @@ fn day9(input: &std::path::PathBuf) -> io::Result<()> {
 fn main() -> io::Result<()> {
     let args = Args::parse();
 
-    let day_map: &[(&str, Mode, fn(&PathBuf) -> io::Result<()>)] = &[
+    let day_map: &[(&str, Mode, fn(&PathBuf) -> Result<(), UpdateError>)] = &[
         ("Day1", Mode::Day1, day1),
         ("Day2", Mode::Day2, day2),
         ("Day3", Mode::Day3, day3),
@@ -304,14 +310,32 @@ fn main() -> io::Result<()> {
                     continue;
                 }
                 if let Err(e) = time_day(name, *func, &day_input) {
-                    eprintln!("Error in {}: {:?}", name, e);
+                    match e {
+                        UpdateError::EmptyInput => eprintln!("{} failed: input was empty!", name),
+                        UpdateError::InvalidInput(msg) => {
+                            eprintln!("{} failed: invalid input: {}", name, msg)
+                        }
+                        UpdateError::Io(io_err) => {
+                            eprintln!("{} failed: IO error: {}", name, io_err)
+                        }
+                    }
                 }
             }
         }
         _ => {
             if let Some((name, _, func)) = day_map.iter().find(|(_, m, _)| *m == args.mode) {
                 let day_input = day_input_path(&args.input, name);
-                time_day(name, *func, &day_input)?;
+                if let Err(e) = time_day(name, *func, &day_input) {
+                    match e {
+                        UpdateError::EmptyInput => eprintln!("{} failed: input was empty!", name),
+                        UpdateError::InvalidInput(msg) => {
+                            eprintln!("{} failed: invalid input: {}", name, msg)
+                        }
+                        UpdateError::Io(io_err) => {
+                            eprintln!("{} failed: IO error: {}", name, io_err)
+                        }
+                    }
+                }
             } else {
                 eprintln!("Unknown mode {:?}", args.mode);
             }
